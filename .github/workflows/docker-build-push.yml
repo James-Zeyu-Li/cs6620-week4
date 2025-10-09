@@ -54,7 +54,9 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}cs6620-app:latest
+        tags: |
+          docker.io/${{ secrets.DOCKERHUB_USERNAME }}/cs6620-app:latest
+          docker.io/${{ secrets.DOCKERHUB_USERNAME }}/cs6620-app:${{ github.sha }}
         labels: |
           org.opencontainers.image.source=${{ github.event.repository.html_url }}
           org.opencontainers.image.revision=${{ github.sha }}

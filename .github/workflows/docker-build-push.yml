@@ -1,63 +1,65 @@
-name: Debug Secrets
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Python application
 
 on:
   push:
     branches: [ "week02" ]
 
 jobs:
-  debug:
+  build:
     runs-on: ubuntu-latest
     
+    env:
+      IMAGE_NAME: cs6620-app
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    
-    - name: Debug - Check secrets availability
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
       run: |
-        echo "Checking if secrets are available..."
-        
-        # Check DOCKERHUB_USERNAME
-        if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-          echo "✅ DOCKERHUB_USERNAME is set"
-          echo "Username length: ${#USERNAME}"
-          # Print first and last character only for verification
-          USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-          echo "Username starts with: ${USERNAME:0:1}"
-          echo "Username ends with: ${USERNAME: -1}"
-        else
-          echo "❌ DOCKERHUB_USERNAME is NOT set or empty"
-        fi
-        
-        # Check DOCKERHUB_TOKEN
-        if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
-          echo "✅ DOCKERHUB_TOKEN is set"
-          TOKEN="${{ secrets.DOCKERHUB_TOKEN }}"
-          echo "Token length: ${#TOKEN}"
-        else
-          echo "❌ DOCKERHUB_TOKEN is NOT set or empty"
-        fi
-    
-    - name: Test manual Docker login
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with flake8
       run: |
-        if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
-          echo "Attempting manual Docker login..."
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-          if [ $? -eq 0 ]; then
-            echo "✅ Manual login successful"
-            docker logout
-          else
-            echo "❌ Manual login failed"
-          fi
-        else
-          echo "⚠️ Skipping login test - secrets not available"
-        fi
-    
-    - name: List all available contexts
+        pip install flake8
+        flake8 .
+      continue-on-error: true   # This line ensures the workflow doesn't block on lint errors
+
+    - name: Test with pytest
       run: |
-        echo "GitHub context info:"
-        echo "Repository: ${{ github.repository }}"
-        echo "Repository owner: ${{ github.repository_owner }}"
-        echo "Actor: ${{ github.actor }}"
-        echo "Event name: ${{ github.event_name }}"
-        echo "Ref: ${{ github.ref }}"
-        echo "SHA: ${{ github.sha }}"
+        pip install pytest
+        pytest
+      continue-on-error: true   # This line ensures the workflow doesn't block on test errors
+
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}cs6620-app:latest
+        labels: |
+          org.opencontainers.image.source=${{ github.event.repository.html_url }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          build.source=github-actions
+          build.workflow=${{ github.workflow }}
+          build.run_id=${{ github.run_id }}
+          build.run_number=${{ github.run_number }}

@@ -1,72 +1,63 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
-name: Python application
+name: Debug Secrets
 
 on:
   push:
     branches: [ "week02" ]
 
 jobs:
-  build:
+  debug:
     runs-on: ubuntu-latest
     
-    env:
-      IMAGE_NAME: cs6620-app
-      REGISTRY: docker.io
-
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-
-    - name: Install dependencies
+    
+    - name: Debug - Check secrets availability
       run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-    - name: Lint with flake8
+        echo "Checking if secrets are available..."
+        
+        # Check DOCKERHUB_USERNAME
+        if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+          echo "✅ DOCKERHUB_USERNAME is set"
+          echo "Username length: ${#USERNAME}"
+          # Print first and last character only for verification
+          USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+          echo "Username starts with: ${USERNAME:0:1}"
+          echo "Username ends with: ${USERNAME: -1}"
+        else
+          echo "❌ DOCKERHUB_USERNAME is NOT set or empty"
+        fi
+        
+        # Check DOCKERHUB_TOKEN
+        if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+          echo "✅ DOCKERHUB_TOKEN is set"
+          TOKEN="${{ secrets.DOCKERHUB_TOKEN }}"
+          echo "Token length: ${#TOKEN}"
+        else
+          echo "❌ DOCKERHUB_TOKEN is NOT set or empty"
+        fi
+    
+    - name: Test manual Docker login
       run: |
-        pip install flake8
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      continue-on-error: true
-
-    - name: Test with pytest
+        if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+          echo "Attempting manual Docker login..."
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          if [ $? -eq 0 ]; then
+            echo "✅ Manual login successful"
+            docker logout
+          else
+            echo "❌ Manual login failed"
+          fi
+        else
+          echo "⚠️ Skipping login test - secrets not available"
+        fi
+    
+    - name: List all available contexts
       run: |
-        pip install pytest
-        pytest || true
-      continue-on-error: true
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        platforms: linux/amd64
-        push: true
-        tags: |
-          ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-          ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-        labels: |
-          org.opencontainers.image.source=${{ github.event.repository.html_url }}
-          org.opencontainers.image.revision=${{ github.sha }}
-          org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-          build.source=github-actions
-          build.workflow=${{ github.workflow }}
-          build.run_id=${{ github.run_id }}
-          build.run_number=${{ github.run_number }}
+        echo "GitHub context info:"
+        echo "Repository: ${{ github.repository }}"
+        echo "Repository owner: ${{ github.repository_owner }}"
+        echo "Actor: ${{ github.actor }}"
+        echo "Event name: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "SHA: ${{ github.sha }}"
